@@ -12,8 +12,9 @@ from aiohttp import web
 # ===================== SOZLAMALAR =====================
 BOT_TOKEN = "8999661868:AAG5VZzo-_xCH8AjN9EvwNATVdc6WGUlMuM"
 
-# 2 TA KANAL - PUBG AKK faqat ko'rinadi, MAJBURIY EMAS
+# 2 TA KANAL - IKKALASI HAM MAJBURIY!
 CHANNELS = [
+    # Public kanal (MAJBURIY obuna)
     {
         "id": "@odzif12345",
         "name": "ODIZV KANALI",
@@ -21,13 +22,14 @@ CHANNELS = [
         "type": "public",
         "required": True
     },
+    # Private kanal (MAJBURIY obuna - bot ADMIN bo'lishi SHART!)
     {
         "id": "https://t.me/+o4vSqtY849E5OWQy",
         "name": "PUBG AKK",
         "link": "https://t.me/+o4vSqtY849E5OWQy",
         "type": "private",
-        "required": False
-    }
+        "required": True
+    },
 ]
 
 ADMIN_ID = 7928569939
@@ -103,22 +105,19 @@ def get_ref_count(user_id):
     conn.close()
     return row[0] if row else 0
 
-# ===================== OBUNA TEKSHIRISH =====================
+# ===================== OBUNA TEKSHIRISH (2 TA KANAL HAM MAJBURIY) =====================
 async def check_subscription(user_id):
-    """Faqat required=True bo'lgan kanallarni tekshiradi"""
+    """Foydalanuvchi barcha kanallarga obuna bo'lganligini tekshiradi"""
     for channel in CHANNELS:
-        if not channel.get("required", True):
-            print(f"⏭️ {channel['name']} majburiy emas, o'tkazib yuborildi")
-            continue
-            
         try:
             channel_id = channel["id"]
             channel_name = channel["name"]
             
             if channel_id.startswith("@"):
+                # Public kanal - username bilan
                 member = await bot.get_chat_member(channel_id, user_id)
             else:
-                # Private kanal ID raqami bo'lishi kerak
+                # Private kanal - ID raqam bilan (bot admin bo'lishi kerak!)
                 member = await bot.get_chat_member(channel_id, user_id)
             
             if member.status not in ['member', 'creator', 'administrator']:
@@ -129,16 +128,16 @@ async def check_subscription(user_id):
                 
         except Exception as e:
             print(f"⚠️ {channel_name} tekshirish xatosi: {e}")
+            if "member list is inaccessible" in str(e):
+                print(f"💡 Botni {channel_name} ga ADMIN qiling!")
             return False
     
     return True
 
 def get_subscription_keyboard():
-    """Faqat majburiy kanal uchun tugma"""
+    """Obuna tugmalari (2 ta kanal ham ko'rsatiladi)"""
     buttons = []
     for channel in CHANNELS:
-        if not channel.get("required", True):
-            continue
         buttons.append([InlineKeyboardButton(
             text=f"📢 {channel['name']} ga obuna bo'lish",
             url=channel["link"]
@@ -191,19 +190,20 @@ async def start(message: types.Message):
     
     print(f"📝 Foydalanuvchi: {user_id}")
     
+    # Obunani tekshirish (2 ta kanal ham)
     if not await check_subscription(user_id):
-        required_channels = [ch for ch in CHANNELS if ch.get("required", True)]
-        channels_text = "\n".join([f"• {ch['name']}" for ch in required_channels])
+        channels_text = "\n".join([f"• {ch['name']}" for ch in CHANNELS])
         
         await message.answer(
-            f"⚠️ <b>Botdan foydalanish uchun kanalga obuna bo'ling!</b>\n\n"
-            f"📢 Kerakli kanal:\n{channels_text}\n\n"
+            f"⚠️ <b>Botdan foydalanish uchun kanallarga obuna bo'ling!</b>\n\n"
+            f"📢 Kerakli kanallar:\n{channels_text}\n\n"
             f"👇 Obuna bo'lgach, <b>✅ Obunani tekshirish</b> tugmasini bosing.",
             parse_mode="HTML",
             reply_markup=get_subscription_keyboard()
         )
         return
     
+    # Obuna bo'lgan
     if not get_user(user_id):
         add_user(user_id, username, referrer_id)
         if referrer_id:
@@ -228,7 +228,7 @@ async def check_subscription_callback(callback: types.CallbackQuery):
     print(f"🔍 Obuna tekshirilmoqda: {user_id}")
     
     if not await check_subscription(user_id):
-        await callback.answer("❌ Siz hali kanalga obuna bo'lmadingiz!", show_alert=True)
+        await callback.answer("❌ Siz hali barcha kanallarga obuna bo'lmadingiz!", show_alert=True)
         return
     
     if not get_user(user_id):
@@ -237,7 +237,7 @@ async def check_subscription_callback(callback: types.CallbackQuery):
     await callback.message.delete()
     await callback.message.answer(
         f"✅ <b>Tabriklaymiz!</b>\n\n"
-        f"Siz kanalga obuna bo'ldingiz!\n"
+        f"Siz barcha kanallarga obuna bo'ldingiz!\n"
         f"💎 Balans: <b>{get_balance(user_id)} UC</b>\n\n"
         f"💰 Yechish uchun minimal: <b>{MIN_WITHDRAW} UC</b>",
         parse_mode="HTML",
@@ -251,7 +251,7 @@ async def show_balance(message: types.Message):
     
     if not await check_subscription(user_id):
         await message.answer(
-            "⚠️ Iltimos, kanalga obuna bo'ling!",
+            "⚠️ Iltimos, kanallarga obuna bo'ling!",
             reply_markup=get_subscription_keyboard()
         )
         return
@@ -275,7 +275,7 @@ async def withdraw(message: types.Message, state: FSMContext):
     
     if not await check_subscription(user_id):
         await message.answer(
-            "⚠️ Iltimos, kanalga obuna bo'ling!",
+            "⚠️ Iltimos, kanallarga obuna bo'ling!",
             reply_markup=get_subscription_keyboard()
         )
         return
@@ -351,7 +351,7 @@ async def show_referral(message: types.Message):
     
     if not await check_subscription(user_id):
         await message.answer(
-            "⚠️ Iltimos, kanalga obuna bo'ling!",
+            "⚠️ Iltimos, kanallarga obuna bo'ling!",
             reply_markup=get_subscription_keyboard()
         )
         return
@@ -369,7 +369,7 @@ async def show_referral(message: types.Message):
         f"💎 Jami daromad: <b>{ref_count * REFERRAL_BONUS} UC</b>\n\n"
         f"🎁 <b>Qanday ishlaydi?</b>\n"
         f"1️⃣ Havolani do'stingizga yuboring\n"
-        f"2️⃣ U kanalga obuna bo'lsin\n"
+        f"2️⃣ U kanallarga obuna bo'lsin\n"
         f"3️⃣ Siz <b>+{REFERRAL_BONUS} UC</b> olasiz!",
         parse_mode="HTML",
         reply_markup=get_main_menu()
@@ -381,7 +381,7 @@ async def show_rules(message: types.Message):
         f"📋 <b>Bot Qoidalari</b>\n\n"
         f"1️⃣ <b>Referal:</b> Har bir taklif uchun +{REFERRAL_BONUS} UC\n"
         f"2️⃣ <b>Yechish:</b> Minimal {MIN_WITHDRAW} UC\n"
-        f"3️⃣ <b>Majburiy obuna:</b> Kanalga obuna bo'lish shart\n"
+        f"3️⃣ <b>Majburiy obuna:</b> 2 ta kanalga obuna bo'lish shart\n"
         f"4️⃣ <b>Aldash:</b> Soxta akkauntlar taqiqlanadi!\n\n"
         f"⚠️ Qoidalarni buzganlar bloklanadi!",
         parse_mode="HTML",
@@ -409,16 +409,15 @@ async def main():
     
     me = await bot.get_me()
     print(f"✅ Bot: @{me.username}")
-    print(f"\n📢 Majburiy kanallar:")
+    print(f"\n📢 Majburiy kanallar ({len(CHANNELS)} ta):")
     for ch in CHANNELS:
-        if ch.get("required", True):
-            print(f"   - {ch['name']} (MAJBURIY)")
-        else:
-            print(f"   - {ch['name']} (MAJBURIY EMAS)")
+        print(f"   - {ch['name']}: {ch['link']} ({ch['type']})")
     print(f"\n💰 Minimal yechish: {MIN_WITHDRAW} UC")
     print(f"🎁 Referal bonus: {REFERRAL_BONUS} UC")
     print("="*50)
     print("🎉 BOT ISHLADI!")
+    print("="*50)
+    print("\n💡 MUHIM: Private kanal uchun botni ADMIN qiling!")
     print("="*50 + "\n")
     
     await dp.start_polling(bot)
