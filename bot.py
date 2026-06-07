@@ -12,23 +12,26 @@ from aiohttp import web
 # ===================== SOZLAMALAR =====================
 BOT_TOKEN = "8999661868:AAG5VZzo-_xCH8AjN9EvwNATVdc6WGUlMuM"
 
-def get_subscription_keyboard():
-    """Faqat majburiy kanallar uchun tugmalar"""
-    buttons = []
-    for channel in CHANNELS:
-        if not channel.get("required", True):
-            continue  # Majburiy emas, tugma ko'rsatma
-        buttons.append([InlineKeyboardButton(
-            text=f"📢 {channel['name']} ga obuna bo'lish",
-            url=channel["link"]
-        )])
-    
-    buttons.append([InlineKeyboardButton(
-        text="✅ Obunani tekshirish",
-        callback_data="check_sub"
-    )])
-    
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
+# 2 TA KANAL (1 public majburiy + 1 private majburiy emas)
+CHANNELS = [
+    # Public kanal (MAJBURIY obuna)
+    {
+        "id": "@odzif12345",
+        "name": "KANALI",
+        "link": "https://t.me/odzif12345",
+        "type": "public",
+        "required": True
+    },
+    # Private kanal (MAJBURIY EMAS, faqat ko'rinadi)
+    {
+        "id": "https://t.me/+o4vSqtY849E5OWQy",
+        "name": "kanal",
+        "link": "https://t.me/+o4vSqtY849E5OWQy",
+        "type": "private",
+        "required": False
+    },
+]
+
 ADMIN_ID = 7928569939
 REFERRAL_BONUS = 60
 MIN_WITHDRAW = 720
@@ -104,7 +107,13 @@ def get_ref_count(user_id):
 
 # ===================== OBUNA TEKSHIRISH =====================
 async def check_subscription(user_id):
+    """Faqat required=True bo'lgan kanallarni tekshiradi"""
     for channel in CHANNELS:
+        # Faqat majburiy kanallarni tekshir
+        if not channel.get("required", True):
+            print(f"⏭️ {channel['name']} majburiy emas, o'tkazib yuborildi")
+            continue
+            
         try:
             channel_id = channel["id"]
             channel_name = channel["name"]
@@ -127,8 +136,11 @@ async def check_subscription(user_id):
     return True
 
 def get_subscription_keyboard():
+    """Faqat majburiy kanal uchun tugma"""
     buttons = []
     for channel in CHANNELS:
+        if not channel.get("required", True):
+            continue
         buttons.append([InlineKeyboardButton(
             text=f"📢 {channel['name']} ga obuna bo'lish",
             url=channel["link"]
@@ -141,9 +153,10 @@ def get_subscription_keyboard():
     
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
+# ===================== MENU =====================
 def get_main_menu():
     keyboard = ReplyKeyboardMarkup(keyboard=[
-        [KeyboardButton(text="💎 Balans"), KeyboardButton(text="💰 Yechish")],
+        [KeyboardButton(text="💎 Balans"), KeyboardButton(text="💰 UC Yechish")],
         [KeyboardButton(text="👥 Referal"), KeyboardButton(text="📋 Qoidalar")],
         [KeyboardButton(text="📞 Murojat")]
     ], resize_keyboard=True)
@@ -180,8 +193,10 @@ async def start(message: types.Message):
     
     print(f"📝 Foydalanuvchi: {user_id}")
     
+    # Obunani tekshirish (faqat majburiy kanal)
     if not await check_subscription(user_id):
-        channels_text = "\n".join([f"• {ch['name']}" for ch in CHANNELS])
+        required_channels = [ch for ch in CHANNELS if ch.get("required", True)]
+        channels_text = "\n".join([f"• {ch['name']}" for ch in required_channels])
         
         await message.answer(
             f"⚠️ <b>Botdan foydalanish uchun kanalga obuna bo'ling!</b>\n\n"
@@ -192,6 +207,7 @@ async def start(message: types.Message):
         )
         return
     
+    # Obuna bo'lgan
     if not get_user(user_id):
         add_user(user_id, username, referrer_id)
         if referrer_id:
@@ -393,12 +409,16 @@ async def main():
     print("🤖 BOT ISHGA TUSHMOQDA...")
     print("="*50)
     
-    # Web server (Render uchun)
     await start_web_server()
     
     me = await bot.get_me()
     print(f"✅ Bot: @{me.username}")
-    print(f"\n📢 Majburiy kanal: {CHANNELS[0]['name']}")
+    print(f"\n📢 Majburiy kanallar:")
+    for ch in CHANNELS:
+        if ch.get("required", True):
+            print(f"   - {ch['name']} (MAJBURIY)")
+        else:
+            print(f"   - {ch['name']} (MAJBURIY EMAS)")
     print(f"\n💰 Minimal yechish: {MIN_WITHDRAW} UC")
     print(f"🎁 Referal bonus: {REFERRAL_BONUS} UC")
     print("="*50)
