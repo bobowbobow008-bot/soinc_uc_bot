@@ -12,23 +12,19 @@ from aiohttp import web
 # ===================== SOZLAMALAR =====================
 BOT_TOKEN = "8999661868:AAG5VZzo-_xCH8AjN9EvwNATVdc6WGUlMuM"
 
-# 2 TA KANAL - IKKALASI HAM MAJBURIY!
+# 2 TA KANAL - IKKALASI HAM MAJBURIY
 CHANNELS = [
-    # Public kanal (MAJBURIY obuna)
     {
         "id": "@odzif12345",
         "name": "ODIZV KANALI",
         "link": "https://t.me/odzif12345",
-        "type": "public",
-        "required": True
+        "type": "public"
     },
-    # Private kanal (MAJBURIY obuna - bot ADMIN bo'lishi SHART!)
     {
-        "id": "3963861782",
-        "name": "kanal",
-        "link": "https:https://t.me/razee_sell",
-        "type": "public",
-        "required": True
+        "id": "@razee_sell",
+        "name": "RAZEE SELL",
+        "link": "https://t.me/razee_sell",
+        "type": "public"
     },
 ]
 
@@ -105,7 +101,7 @@ def get_ref_count(user_id):
     conn.close()
     return row[0] if row else 0
 
-# ===================== OBUNA TEKSHIRISH (2 TA KANAL HAM MAJBURIY) =====================
+# ===================== OBUNA TEKSHIRISH =====================
 async def check_subscription(user_id):
     """Foydalanuvchi barcha kanallarga obuna bo'lganligini tekshiradi"""
     for channel in CHANNELS:
@@ -114,10 +110,8 @@ async def check_subscription(user_id):
             channel_name = channel["name"]
             
             if channel_id.startswith("@"):
-                # Public kanal - username bilan
                 member = await bot.get_chat_member(channel_id, user_id)
             else:
-                # Private kanal - ID raqam bilan (bot admin bo'lishi kerak!)
                 member = await bot.get_chat_member(channel_id, user_id)
             
             if member.status not in ['member', 'creator', 'administrator']:
@@ -128,14 +122,12 @@ async def check_subscription(user_id):
                 
         except Exception as e:
             print(f"⚠️ {channel_name} tekshirish xatosi: {e}")
-            if "member list is inaccessible" in str(e):
-                print(f"💡 Botni {channel_name} ga ADMIN qiling!")
             return False
     
     return True
 
 def get_subscription_keyboard():
-    """Obuna tugmalari (2 ta kanal ham ko'rsatiladi)"""
+    """Obuna tugmalari"""
     buttons = []
     for channel in CHANNELS:
         buttons.append([InlineKeyboardButton(
@@ -159,7 +151,7 @@ def get_main_menu():
     ], resize_keyboard=True)
     return keyboard
 
-# ===================== WEB SERVER (Render uchun) =====================
+# ===================== WEB SERVER =====================
 async def health_check(request):
     return web.Response(text="Bot is running!", status=200)
 
@@ -190,7 +182,6 @@ async def start(message: types.Message):
     
     print(f"📝 Foydalanuvchi: {user_id}")
     
-    # Obunani tekshirish (2 ta kanal ham)
     if not await check_subscription(user_id):
         channels_text = "\n".join([f"• {ch['name']}" for ch in CHANNELS])
         
@@ -203,7 +194,6 @@ async def start(message: types.Message):
         )
         return
     
-    # Obuna bo'lgan
     if not get_user(user_id):
         add_user(user_id, username, referrer_id)
         if referrer_id:
@@ -411,13 +401,11 @@ async def main():
     print(f"✅ Bot: @{me.username}")
     print(f"\n📢 Majburiy kanallar ({len(CHANNELS)} ta):")
     for ch in CHANNELS:
-        print(f"   - {ch['name']}: {ch['link']} ({ch['type']})")
+        print(f"   - {ch['name']}: {ch['link']}")
     print(f"\n💰 Minimal yechish: {MIN_WITHDRAW} UC")
     print(f"🎁 Referal bonus: {REFERRAL_BONUS} UC")
     print("="*50)
     print("🎉 BOT ISHLADI!")
-    print("="*50)
-    print("\n💡 MUHIM: Private kanal uchun botni ADMIN qiling!")
     print("="*50 + "\n")
     
     await dp.start_polling(bot)
