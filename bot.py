@@ -13,14 +13,23 @@ from aiohttp import web
 BOT_TOKEN = "8999661868:AAG5VZzo-_xCH8AjN9EvwNATVdc6WGUlMuM"
 
 CHANNELS = [
+    # Public kanal (MAJBURIY obuna)
     {
         "id": "@odzif12345",
         "name": "ODIZV KANALI",
         "link": "https://t.me/odzif12345",
-        "type": "public"
+        "type": "public",
+        "required": True  # MAJBURIY
+    },
+    # Private kanal (obuna SHART EMAS, faqat ko'rinadi)
+    {
+        "id": "https://t.me/+x3GtcWm6lThmNjcy",
+        "name": "PUBG AKK",
+        "link": "https://t.me/+x3GtcWm6lThmNjcy",
+        "type": "private",
+        "required": False  # MAJBURIY EMAS
     },
 ]
-
 ADMIN_ID = 7928569939
 REFERRAL_BONUS = 60
 MIN_WITHDRAW = 720
