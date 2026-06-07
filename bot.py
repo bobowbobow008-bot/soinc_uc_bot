@@ -15,20 +15,24 @@ BOT_TOKEN = "8999661868:AAG5VZzo-_xCH8AjN9EvwNATVdc6WGUlMuM"
 # 2 TA KANAL (1 public + 1 private) - IKKALASI MAJBURIY!
 CHANNELS = [
     # Public kanal (MAJBURIY obuna)
+CHANNELS = [
+    # Public kanal (MAJBURIY obuna)
     {
         "id": "@odzif12345",
-        "name": " KANALI",
+        "name": "ODIZV KANALI",
         "link": "https://t.me/odzif12345",
         "type": "public",
         "required": True
     },
-    # Private kanal (MAJBURIY obuna - bot ADMIN bo'lishi SHART!)
+    # Private kanal (MAJBURIY EMAS, tekshirilmaydi, faqat ko'rinadi)
     {
-       
+        "id": None,  # ID kerak emas, chunki tekshirilmaydi
+        "name": "PUBG AKK",
         "link": "https://t.me/+o4vSqtY849E5OWQy",
-        "type": "kanal",
-        "required": True
+        "type": "private",
+        "required": False
     },
+]
 ]
 
 ADMIN_ID = 7928569939
