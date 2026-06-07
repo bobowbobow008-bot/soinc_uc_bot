@@ -12,24 +12,23 @@ from aiohttp import web
 # ===================== SOZLAMALAR =====================
 BOT_TOKEN = "8999661868:AAG5VZzo-_xCH8AjN9EvwNATVdc6WGUlMuM"
 
-CHANNELS = [
-    # Public kanal (MAJBURIY obuna)
-    {
-        "id": "@odzif12345",
-        "name": "ODIZV KANALI",
-        "link": "https://t.me/odzif12345",
-        "type": "public",
-        "required": True  # MAJBURIY
-    },
-    # Private kanal (obuna SHART EMAS, faqat ko'rinadi)
-    {
-        "id": "https://t.me/+x3GtcWm6lThmNjcy",
-        "name": "PUBG AKK",
-        "link": "https://t.me/+x3GtcWm6lThmNjcy",
-        "type": "private",
-        "required": False  # MAJBURIY EMAS
-    },
-]
+def get_subscription_keyboard():
+    """Faqat majburiy kanallar uchun tugmalar"""
+    buttons = []
+    for channel in CHANNELS:
+        if not channel.get("required", True):
+            continue  # Majburiy emas, tugma ko'rsatma
+        buttons.append([InlineKeyboardButton(
+            text=f"📢 {channel['name']} ga obuna bo'lish",
+            url=channel["link"]
+        )])
+    
+    buttons.append([InlineKeyboardButton(
+        text="✅ Obunani tekshirish",
+        callback_data="check_sub"
+    )])
+    
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 ADMIN_ID = 7928569939
 REFERRAL_BONUS = 60
 MIN_WITHDRAW = 720
