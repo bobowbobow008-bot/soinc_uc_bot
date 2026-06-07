@@ -24,10 +24,10 @@ CHANNELS = [
     },
     # Private kanal (MAJBURIY obuna - bot ADMIN bo'lishi SHART!)
     {
-        "id": "https://t.me/+o4vSqtY849E5OWQy",
-        "name": "PUBG AKK",
-        "link": "https://t.me/+o4vSqtY849E5OWQy",
-        "type": "private",
+        "id": "3963861782",
+        "name": "kanal",
+        "link": "https:https://t.me/razee_sell",
+        "type": "public",
         "required": True
     },
 ]
