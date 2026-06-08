@@ -3,7 +3,7 @@ import sqlite3
 import random
 from datetime import datetime, timedelta
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandStart, Command  # <-- Command qo'shildi
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -22,13 +22,13 @@ ADMIN_ID = 7928569939
 REFERRAL_BONUS = 60
 MIN_WITHDRAW = 720
 
-# Baraban yutuqlari
 SPIN_REWARDS = {20: 40, 30: 25, 15: 25, 50: 7, 100: 2.5, 200: 0.5}
 # ======================================================
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
+# ===================== DATABASE =====================
 def init_db():
     conn = sqlite3.connect("bot.db")
     c = conn.cursor()
@@ -47,6 +47,14 @@ def init_db():
     ''')
     conn.commit()
     conn.close()
+
+def get_user(user_id):
+    conn = sqlite3.connect("bot.db")
+    c = conn.cursor()
+    c.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
+    row = c.fetchone()
+    conn.close()
+    return row
 
 def add_user(user_id, username, full_name, referrer_id=None):
     conn = sqlite3.connect("bot.db")
@@ -152,6 +160,7 @@ def get_top_earners(limit=10):
     conn.close()
     return rows
 
+# ===================== OBUNA TEKSHIRISH =====================
 async def check_subscription(user_id):
     for channel in CHANNELS:
         try:
@@ -177,6 +186,7 @@ def get_main_menu():
         [KeyboardButton(text="📞 Murojat")]
     ], resize_keyboard=True)
 
+# ===================== WEB SERVER =====================
 async def health_check(request):
     return web.Response(text="Bot is running!", status=200)
 
@@ -189,6 +199,7 @@ async def start_web_server():
     await site.start()
     print("✅ Web server started on port 8080")
 
+# ===================== HANDLERLAR =====================
 class WithdrawState(StatesGroup):
     waiting_for_id = State()
 
@@ -298,7 +309,6 @@ async def show_referral(message: types.Message):
         parse_mode="HTML", reply_markup=get_main_menu()
     )
 
-# ===================== BARABAN =====================
 @dp.message(F.text == "🎡 Baraban")
 async def spin_wheel(message: types.Message):
     user_id = message.from_user.id
@@ -325,7 +335,6 @@ async def spin_wheel(message: types.Message):
     
     await message.answer(f"🎉 <b>BARABAN NATIJASI!</b> 🎉\n\n💰 Siz <b>{reward} UC</b> yutdingiz!\n💎 Yangi balans: <b>{get_balance(user_id)} UC</b>\n🎡 Keyingi aylantirish 24 soatdan keyin!", parse_mode="HTML", reply_markup=get_main_menu())
 
-# ===================== TOP REYTING =====================
 @dp.message(F.text == "🏆 Top Reyting")
 async def show_top_rating(message: types.Message):
     user_id = message.from_user.id
@@ -371,47 +380,7 @@ async def show_rules(message: types.Message):
 async def show_contact(message: types.Message):
     await message.answer("📞 <b>Murojat</b>\n\n👨‍💼 Admin: @vrxszd\n\n❓ Savol va muammolar uchun yozing!", parse_mode="HTML", reply_markup=get_main_menu())
 
-@dp.message(F.text == "🏆 Top Reyting")
-async def show_top_rating(message: types.Message):
-    user_id = message.from_user.id
-    
-    if not await check_subscription(user_id):
-        await message.answer("⚠️ Kanallarga obuna bo'ling!", reply_markup=get_subscription_keyboard())
-        return
-    
-    top_ref = get_top_referrers(10)
-    top_earn = get_top_earners(10)
-    
-    # Top taklif qilganlar
-    ref_text = "<b>👥 ENG KO'P TAKLIF QILGANLAR</b>\n\n"
-    if top_ref:
-        for i, (uid, username, full_name, count) in enumerate(top_ref, 1):
-            name = full_name if full_name else username or f"User {uid}"
-            if len(name) > 20:
-                name = name[:18] + "..."
-            ref_text += f"{i}. {name} – <b>{count}</b> ta\n"
-    else:
-        ref_text += "Hali hech kim taklif qilmagan\n"
-    
-    # Top UC ishlaganlar
-    earn_text = "\n\n<b>💰 ENG KO'P UC ISHLAGANLAR</b>\n\n"
-    if top_earn:
-        for i, (uid, username, full_name, earned) in enumerate(top_earn, 1):
-            name = full_name if full_name else username or f"User {uid}"
-            if len(name) > 20:
-                name = name[:18] + "..."
-            earn_text += f"{i}. {name} – <b>{earned}</b> UC\n"
-    else:
-        earn_text += "Hali hech kim UC ishlamagan\n"
-    
-    await message.answer(
-        f"🏆 <b>TOP REYTING</b>\n\n{ref_text}{earn_text}\n\n"
-        f"🎡 Baraban aylantirib va do'stlaringizni taklif qilib reytingga kiring!",
-        parse_mode="HTML",
-        reply_markup=get_main_menu()
-    )
-
-# ===================== PROMO KOD (FAQAT ADMIN) =====================
+# ===================== ADMIN PROMO =====================
 @dp.message(Command("promo"))
 async def admin_promo(message: types.Message):
     if message.from_user.id != ADMIN_ID:
@@ -439,6 +408,7 @@ async def admin_promo(message: types.Message):
     except:
         await message.answer("❌ Xato! To'g'ri formatda yozing: /promo user_id amount")
 
+# ===================== ASOSIY FUNKSIYA =====================
 async def main():
     init_db()
     print("\n" + "="*50)
