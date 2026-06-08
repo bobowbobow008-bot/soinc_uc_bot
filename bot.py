@@ -33,15 +33,15 @@ ADMIN_ID = 7928569939
 REFERRAL_BONUS = 60
 MIN_WITHDRAW = 720
 
-# Baraban yutug' ehtimollari
-SPIN_REWARDS = [
-    {"amount": 20, "chance": 40},   # 40% ehtimol
-    {"amount": 30, "chance": 25},   # 25% ehtimol
-    {"amount": 15, "chance": 25},   # 25% ehtimol
-    {"amount": 50, "chance": 7},    # 7% ehtimol
-    {"amount": 100, "chance": 2.5}, # 2.5% ehtimol
-    {"amount": 200, "chance": 0.5}, # 0.5% ehtimol
-]
+# Baraban yutuqlari (UC)
+SPIN_REWARDS = {
+    20: 40,   # 20 UC - 40% ehtimol
+    30: 25,   # 30 UC - 25% ehtimol
+    15: 25,   # 15 UC - 25% ehtimol
+    50: 7,    # 50 UC - 7% ehtimol
+    100: 2.5, # 100 UC - 2.5% ehtimol
+    200: 0.5, # 200 UC - 0.5% ehtimol
+}
 # ======================================================
 
 bot = Bot(token=BOT_TOKEN)
@@ -56,7 +56,9 @@ def init_db():
         CREATE TABLE IF NOT EXISTS users (
             user_id INTEGER PRIMARY KEY,
             username TEXT,
+            full_name TEXT,
             balance INTEGER DEFAULT 0,
+            total_earned INTEGER DEFAULT 0,
             referrer_id INTEGER,
             ref_count INTEGER DEFAULT 0,
             last_spin TEXT,
@@ -66,15 +68,16 @@ def init_db():
     conn.commit()
     conn.close()
 
-def add_user(user_id, username, referrer_id=None):
+def add_user(user_id, username, full_name, referrer_id=None):
     conn = sqlite3.connect("bot.db")
     c = conn.cursor()
-    c.execute("INSERT OR IGNORE INTO users (user_id, username, referrer_id) VALUES (?, ?, ?)",
-              (user_id, username, referrer_id))
+    c.execute("INSERT OR IGNORE INTO users (user_id, username, full_name, referrer_id) VALUES (?, ?, ?, ?)",
+              (user_id, username, full_name, referrer_id))
     conn.commit()
     conn.close()
     if referrer_id:
         update_balance(referrer_id, REFERRAL_BONUS)
+        update_total_earned(referrer_id, REFERRAL_BONUS)
         update_ref_count(referrer_id)
 
 def get_user(user_id):
@@ -89,6 +92,13 @@ def update_balance(user_id, amount):
     conn = sqlite3.connect("bot.db")
     c = conn.cursor()
     c.execute("UPDATE users SET balance = balance + ? WHERE user_id=?", (amount, user_id))
+    conn.commit()
+    conn.close()
+
+def update_total_earned(user_id, amount):
+    conn = sqlite3.connect("bot.db")
+    c = conn.cursor()
+    c.execute("UPDATE users SET total_earned = total_earned + ? WHERE user_id=?", (amount, user_id))
     conn.commit()
     conn.close()
 
@@ -111,6 +121,14 @@ def get_ref_count(user_id):
     conn = sqlite3.connect("bot.db")
     c = conn.cursor()
     c.execute("SELECT ref_count FROM users WHERE user_id=?", (user_id,))
+    row = c.fetchone()
+    conn.close()
+    return row[0] if row else 0
+
+def get_total_earned(user_id):
+    conn = sqlite3.connect("bot.db")
+    c = conn.cursor()
+    c.execute("SELECT total_earned FROM users WHERE user_id=?", (user_id,))
     row = c.fetchone()
     conn.close()
     return row[0] if row else 0
@@ -141,10 +159,10 @@ def get_spin_reward():
     """Baraban aylantirish: ehtimollik asosida yutuq tanlaydi"""
     rand = random.uniform(0, 100)
     cumulative = 0
-    for reward in SPIN_REWARDS:
-        cumulative += reward["chance"]
+    for amount, chance in SPIN_REWARDS.items():
+        cumulative += chance
         if rand <= cumulative:
-            return reward["amount"]
+            return amount
     return 20
 
 def has_used_promo(user_id):
@@ -161,6 +179,36 @@ def set_promo_used(user_id):
     c.execute("UPDATE users SET promo_used = 1 WHERE user_id=?", (user_id,))
     conn.commit()
     conn.close()
+
+def get_top_referrers(limit=10):
+    """Eng ko'p referal taklif qilganlar"""
+    conn = sqlite3.connect("bot.db")
+    c = conn.cursor()
+    c.execute("""
+        SELECT user_id, username, full_name, ref_count 
+        FROM users 
+        WHERE ref_count > 0 
+        ORDER BY ref_count DESC 
+        LIMIT ?
+    """, (limit,))
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+def get_top_earners(limit=10):
+    """Eng ko'p UC ishlaganlar"""
+    conn = sqlite3.connect("bot.db")
+    c = conn.cursor()
+    c.execute("""
+        SELECT user_id, username, full_name, total_earned 
+        FROM users 
+        WHERE total_earned > 0 
+        ORDER BY total_earned DESC 
+        LIMIT ?
+    """, (limit,))
+    rows = c.fetchall()
+    conn.close()
+    return rows
 
 # ===================== OBUNA TEKSHIRISH =====================
 async def check_subscription(user_id):
@@ -206,7 +254,7 @@ def get_main_menu():
     keyboard = ReplyKeyboardMarkup(keyboard=[
         [KeyboardButton(text="💰 Balans"), KeyboardButton(text="💸 UC Yechish")],
         [KeyboardButton(text="👥 Referal UC"), KeyboardButton(text="🎡 Baraban")],
-        [KeyboardButton(text="🎁 Promo"), KeyboardButton(text="📋 Qoidalar")],
+        [KeyboardButton(text="🏆 Top Reyting"), KeyboardButton(text="📋 Qoidalar")],
         [KeyboardButton(text="📞 Murojat")]
     ], resize_keyboard=True)
     return keyboard
@@ -232,6 +280,7 @@ class WithdrawState(StatesGroup):
 async def start(message: types.Message):
     user_id = message.from_user.id
     username = message.from_user.username or ""
+    full_name = message.from_user.full_name
     
     args = message.text.split()
     referrer_id = None
@@ -255,7 +304,7 @@ async def start(message: types.Message):
         return
     
     if not get_user(user_id):
-        add_user(user_id, username, referrer_id)
+        add_user(user_id, username, full_name, referrer_id)
         if referrer_id:
             try:
                 await bot.send_message(referrer_id, f"🎉 Referal orqali +{REFERRAL_BONUS} UC qo'shildi!")
@@ -267,7 +316,7 @@ async def start(message: types.Message):
         f"💰 Balans: <b>{get_balance(user_id)} UC</b>\n"
         f"💸 Yechish uchun minimal: <b>{MIN_WITHDRAW} UC</b>\n\n"
         f"🎡 Har kuni baraban aylantirib UC yutib oling!\n"
-        f"🎁 Promo kod: <code>promo:UC120</code> yozing!\n\n"
+        f"🏆 Top reytingda kimlar yetakchi ekanligini ko'ring!\n\n"
         f"👇 Quyidagi menyudan foydalaning:",
         parse_mode="HTML",
         reply_markup=get_main_menu()
@@ -284,14 +333,14 @@ async def check_subscription_callback(callback: types.CallbackQuery):
         return
     
     if not get_user(user_id):
-        add_user(user_id, callback.from_user.username or "", None)
+        add_user(user_id, callback.from_user.username or "", callback.from_user.full_name, None)
     
     await callback.message.delete()
     await callback.message.answer(
         f"✅ <b>Tabriklaymiz!</b>\n\n"
         f"Siz barcha kanallarga obuna bo'ldingiz!\n"
         f"💰 Balans: <b>{get_balance(user_id)} UC</b>\n\n"
-        f"🎡 Baraban aylantirish uchun /spin yozing!",
+        f"🎡 Baraban aylantirish uchun <b>🎡 Baraban</b> tugmasini bosing!",
         parse_mode="HTML",
         reply_markup=get_main_menu()
     )
@@ -310,11 +359,13 @@ async def show_balance(message: types.Message):
         return
     
     balance = get_balance(user_id)
+    total_earned = get_total_earned(user_id)
     ref_count = get_ref_count(user_id)
     
     await message.answer(
         f"💰 <b>Sizning balansingiz</b>\n\n"
-        f"💎 Balans: <b>{balance} UC</b>\n"
+        f"💎 Joriy balans: <b>{balance} UC</b>\n"
+        f"📈 Jami ishlagan: <b>{total_earned} UC</b>\n"
         f"👥 Referallar: <b>{ref_count} ta</b>\n"
         f"🎁 Referaldan daromad: <b>{ref_count * REFERRAL_BONUS} UC</b>\n\n"
         f"💸 Yechish uchun minimal: <b>{MIN_WITHDRAW} UC</b>",
@@ -454,7 +505,7 @@ async def spin_wheel(message: types.Message):
         await message.answer(
             f"⏰ <b>Baraban hali tayyor emas!</b>\n\n"
             f"Keyingi aylantirish: <b>{hours} soat {minutes} daqiqa</b> qoldi\n\n"
-            f"🎡 Har 24 soatda 1 marta aylantira olasiz!",
+            f"🎡 Har <b>24 soatda 1 marta</b> aylantira olasiz!",
             parse_mode="HTML",
             reply_markup=get_main_menu()
         )
@@ -463,25 +514,27 @@ async def spin_wheel(message: types.Message):
     # Baraban aylantirish
     reward = get_spin_reward()
     update_balance(user_id, reward)
+    update_total_earned(user_id, reward)
     update_last_spin(user_id)
     
-    # Animatsiya effekti (qisqa kutish)
-    await message.answer("🎡 **Baraban aylanyapti...** 🎡\n\n⏳ Iltimos kuting...", parse_mode="HTML")
+    # Animatsiya effekti
+    msg = await message.answer("🎡 <b>Baraban aylanyapti...</b> 🎡\n\n⏳ Iltimos kuting...", parse_mode="HTML")
     await asyncio.sleep(1.5)
     
     # Natijani ko'rsatish
-    await message.answer(
+    await msg.edit_text(
         f"🎉 <b>BARABAN NATIJASI!</b> 🎉\n\n"
         f"💰 Siz <b>{reward} UC</b> yutdingiz!\n\n"
-        f"💎 Yangi balans: <b>{get_balance(user_id)} UC</b>\n\n"
+        f"💎 Yangi balans: <b>{get_balance(user_id)} UC</b>\n"
+        f"📈 Jami ishlagan: <b>{get_total_earned(user_id)} UC</b>\n\n"
         f"🎡 Keyingi aylantirish <b>24 soatdan keyin</b> mumkin!",
         parse_mode="HTML",
         reply_markup=get_main_menu()
     )
 
-# ===================== PROMO KOD =====================
-@dp.message(F.text == "🎁 Promo")
-async def promo_info(message: types.Message):
+# ===================== TOP REYTING =====================
+@dp.message(F.text == "🏆 Top Reyting")
+async def show_top_rating(message: types.Message):
     user_id = message.from_user.id
     
     if not await check_subscription(user_id):
@@ -491,46 +544,68 @@ async def promo_info(message: types.Message):
         )
         return
     
+    top_referrers = get_top_referrers(10)
+    top_earners = get_top_earners(10)
+    
+    # Top referallar
+    referrer_text = "<b>👥 ENG KO'P TAKLIF QILGANLAR</b>\n\n"
+    if top_referrers:
+        for i, (uid, username, full_name, count) in enumerate(top_referrers, 1):
+            name = full_name if full_name else username or f"User {uid}"
+            if len(name) > 20:
+                name = name[:18] + "..."
+            referrer_text += f"{i}. {name} – <b>{count}</b> ta\n"
+    else:
+        referrer_text += "Hali hech kim taklif qilmagan\n"
+    
+    # Top ishlaganlar
+    earner_text = "\n\n<b>💰 ENG KO'P UC ISHLAGANLAR</b>\n\n"
+    if top_earners:
+        for i, (uid, username, full_name, earned) in enumerate(top_earners, 1):
+            name = full_name if full_name else username or f"User {uid}"
+            if len(name) > 20:
+                name = name[:18] + "..."
+            earner_text += f"{i}. {name} – <b>{earned}</b> UC\n"
+    else:
+        earner_text += "Hali hech kim UC ishlamagan\n"
+    
     await message.answer(
-        f"🎁 <b>Promo Kod</b>\n\n"
-        f"📝 <b>Promo kodni yozish:</b>\n"
-        f"<code>promo:UC120</code>\n\n"
-        f"💰 <b>Yutug':</b> <b>120 UC</b>\n\n"
-        f"⚠️ <b>Muhim:</b>\n"
-        f"• Har bir foydalanuvchi <b>faqat 1 marta</b> ishlata oladi\n"
-        f"• Kodni to'g'ri formatda yozing\n\n"
-        f"📌 <b>Misol:</b> <code>promo:UC120</code>",
+        f"🏆 <b>TOP REYTING</b>\n\n"
+        f"{referrer_text}{earner_text}\n\n"
+        f"🎡 Baraban aylantirib va do'stlaringizni taklif qilib\n"
+        f"🏆 TOP reytingga kiring!",
         parse_mode="HTML",
         reply_markup=get_main_menu()
     )
 
-@dp.message()
-async def handle_promo(message: types.Message):
-    text = message.text.strip()
-    
-    if text.lower() == "promo:uc120":
-        user_id = message.from_user.id
-        
-        if not await check_subscription(user_id):
-            await message.answer("⚠️ Iltimos, avval kanallarga obuna bo'ling!", reply_markup=get_subscription_keyboard())
-            return
-        
-        if has_used_promo(user_id):
-            await message.answer("❌ Siz allaqachon promo kodni ishlatib bo'lgansiz!\n\nHar bir foydalanuvchi faqat 1 marta ishlata oladi.", reply_markup=get_main_menu())
-            return
-        
-        update_balance(user_id, 120)
-        set_promo_used(user_id)
-        
-        await message.answer(
-            f"🎉 <b>PROMO KOD QABUL QILINDI!</b> 🎉\n\n"
-            f"💰 Sizga <b>120 UC</b> qo'shildi!\n"
-            f"💎 Yangi balans: <b>{get_balance(user_id)} UC</b>\n\n"
-            f"🎡 Baraban aylantirishni unutmang!",
-            parse_mode="HTML",
-            reply_markup=get_main_menu()
-        )
+# ===================== PROMO KOD (FAQAT ADMIN) =====================
+@dp.message(Command("promo"))
+async def admin_promo(message: types.Message):
+    """Faqat admin promo kod berishi mumkin: /promo user_id amount"""
+    if message.from_user.id != ADMIN_ID:
+        await message.answer("❌ Bu buyruq faqat admin uchun!")
         return
+    
+    args = message.text.split()
+    if len(args) < 3:
+        await message.answer("❗ Ishlatish: /promo user_id amount\n\nMisol: /promo 123456789 120")
+        return
+    
+    try:
+        target_user = int(args[1])
+        amount = int(args[2])
+        
+        update_balance(target_user, amount)
+        update_total_earned(target_user, amount)
+        
+        await message.answer(f"✅ Foydalanuvchi {target_user} ga {amount} UC berildi!")
+        
+        try:
+            await bot.send_message(target_user, f"🎁 <b>PROMO KOD!</b>\n\nSizga <b>{amount} UC</b> qo'shildi!\n💰 Yangi balans: <b>{get_balance(target_user)} UC</b>", parse_mode="HTML")
+        except:
+            pass
+    except:
+        await message.answer("❌ Xato! To'g'ri formatda yozing: /promo user_id amount")
 
 # ===================== QOIDALAR =====================
 @dp.message(F.text == "📋 Qoidalar")
@@ -546,9 +621,9 @@ async def show_rules(message: types.Message):
         f"3️⃣ <b>Baraban:</b>\n"
         f"   • Har <b>24 soatda 1 marta</b> aylantirish mumkin\n"
         f"   • Yutuqlar: 15, 20, 30, 50, 100, 200 UC\n\n"
-        f"4️⃣ <b>Promo kod:</b>\n"
-        f"   • <code>promo:UC120</code> - <b>120 UC</b>\n"
-        f"   • Har bir foydalanuvchi <b>faqat 1 marta</b> ishlata oladi\n\n"
+        f"4️⃣ <b>Top Reyting:</b>\n"
+        f"   • Eng ko'p taklif qilganlar\n"
+        f"   • Eng ko'p UC ishlaganlar\n\n"
         f"5️⃣ <b>Majburiy obuna:</b>\n"
         f"   • Botdan foydalanish uchun kanallarga obuna bo'ling\n\n"
         f"6️⃣ <b>Ta'qiqlangan harakatlar:</b>\n"
@@ -569,7 +644,7 @@ async def show_contact(message: types.Message):
         "❓ <b>Savollar bo'yicha:</b>\n"
         "• Yechim muammolari\n"
         "• Referal bo'yicha\n"
-        "• Baraban va promo kodlar\n"
+        "• Baraban va reyting\n"
         "• Umumiy savollar\n\n"
         "📢 <b>Reklama va hamkorlik:</b>\n"
         "👨‍💼 @vrxszd\n\n"
@@ -595,7 +670,7 @@ async def main():
         print(f"   - {ch['name']}: {ch['link']}")
     print(f"\n💰 Minimal yechish: {MIN_WITHDRAW} UC")
     print(f"🎁 Referal bonus: {REFERRAL_BONUS} UC")
-    print(f"🎡 Baraban yutuqlari: {[r['amount'] for r in SPIN_REWARDS]}")
+    print(f"🎡 Baraban yutuqlari: {list(SPIN_REWARDS.keys())}")
     print("="*50)
     print("🎉 BOT ISHLADI!")
     print("="*50 + "\n")
