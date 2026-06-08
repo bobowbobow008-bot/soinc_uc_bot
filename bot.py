@@ -3,7 +3,7 @@ import sqlite3
 import random
 from datetime import datetime, timedelta
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.filters import CommandStart, Command  # <-- Command qo'shildi
+from aiogram.filters import CommandStart, Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -22,6 +22,7 @@ ADMIN_ID = 7928569939
 REFERRAL_BONUS = 60
 MIN_WITHDRAW = 720
 
+# Baraban yutuqlari
 SPIN_REWARDS = {20: 40, 30: 25, 15: 25, 50: 7, 100: 2.5, 200: 0.5}
 # ======================================================
 
@@ -179,12 +180,14 @@ def get_subscription_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 def get_main_menu():
-    return ReplyKeyboardMarkup(keyboard=[
+    # Yashil va ko'k rangli tugmalar
+    keyboard = ReplyKeyboardMarkup(keyboard=[
         [KeyboardButton(text="💰 Balans"), KeyboardButton(text="💸 UC Yechish")],
         [KeyboardButton(text="👥 Referal UC"), KeyboardButton(text="🎡 Baraban")],
         [KeyboardButton(text="🏆 Top Reyting"), KeyboardButton(text="📋 Qoidalar")],
         [KeyboardButton(text="📞 Murojat")]
     ], resize_keyboard=True)
+    return keyboard
 
 # ===================== WEB SERVER =====================
 async def health_check(request):
@@ -228,7 +231,7 @@ async def start(message: types.Message):
         f"✅ <b>Xush kelibsiz, {message.from_user.first_name}!</b>\n\n"
         f"💰 Balans: <b>{get_balance(user_id)} UC</b>\n"
         f"💸 Yechish: <b>{MIN_WITHDRAW} UC</b> dan\n\n"
-        f"🎡 Har kuni baraban aylantiring!\n"
+        f"🎡 Har kuni baraban aylantirib UC yutib oling!\n"
         f"🏆 Top reytingda kimlar yetakchi ekanligini ko'ring!\n\n"
         f"👇 Quyidagi menyudan foydalaning:",
         parse_mode="HTML",
@@ -258,7 +261,8 @@ async def show_balance(message: types.Message):
         f"💎 Joriy: <b>{get_balance(user_id)} UC</b>\n"
         f"📈 Jami ishlagan: <b>{get_total_earned(user_id)} UC</b>\n"
         f"👥 Referallar: <b>{get_ref_count(user_id)} ta</b>\n"
-        f"🎁 Daromad: <b>{get_ref_count(user_id) * REFERRAL_BONUS} UC</b>",
+        f"🎁 Daromad: <b>{get_ref_count(user_id) * REFERRAL_BONUS} UC</b>\n\n"
+        f"💸 Yechish uchun minimal: <b>{MIN_WITHDRAW} UC</b>",
         parse_mode="HTML", reply_markup=get_main_menu()
     )
 
@@ -289,8 +293,8 @@ async def process_withdraw(message: types.Message, state: FSMContext):
         return
     update_balance(user_id, -balance)
     await state.clear()
-    await message.answer(f"✅ So'rov qabul qilindi!\n🎮 ID: {game_id}\n💎 Summa: {balance} UC\n⏰ 24 soat ichida!", reply_markup=get_main_menu())
-    await bot.send_message(ADMIN_ID, f"💸 Yechish!\n👤 {message.from_user.full_name}\n🆔 {user_id}\n🎮 {game_id}\n💎 {balance} UC")
+    await message.answer(f"✅ So'rov qabul qilindi!\n🎮 O'yin ID: {game_id}\n💎 Yechilgan summa: {balance} UC\n⏰ 24 soat ichida!", reply_markup=get_main_menu())
+    await bot.send_message(ADMIN_ID, f"💸 Yechish so'rovi!\n👤 {message.from_user.full_name}\n🆔 {user_id}\n🎮 {game_id}\n💎 {balance} UC")
 
 @dp.message(F.text == "👥 Referal UC")
 async def show_referral(message: types.Message):
@@ -302,13 +306,15 @@ async def show_referral(message: types.Message):
     ref_link = f"https://t.me/{bot_info.username}?start={user_id}"
     await message.answer(
         f"👥 <b>Referal Tizimi</b>\n\n"
-        f"🔗 <b>Havolangiz:</b>\n<code>{ref_link}</code>\n\n"
+        f"🔗 <b>Sizning havolangiz:</b>\n<code>{ref_link}</code>\n\n"
         f"👥 Taklif qilganlar: <b>{get_ref_count(user_id)} ta</b>\n"
         f"💰 Daromad: <b>{get_ref_count(user_id) * REFERRAL_BONUS} UC</b>\n\n"
-        f"📌 Har bir do'st uchun <b>+{REFERRAL_BONUS} UC</b>!",
+        f"📌 Har bir do'stingiz uchun <b>+{REFERRAL_BONUS} UC</b> bonus!\n"
+        f"📌 Cheklovsiz taklif qilishingiz mumkin!",
         parse_mode="HTML", reply_markup=get_main_menu()
     )
 
+# ===================== BARABAN =====================
 @dp.message(F.text == "🎡 Baraban")
 async def spin_wheel(message: types.Message):
     user_id = message.from_user.id
@@ -325,16 +331,31 @@ async def spin_wheel(message: types.Message):
             remaining = next_spin_time - datetime.now()
             hours = remaining.seconds // 3600
             minutes = (remaining.seconds % 3600) // 60
-            await message.answer(f"⏰ Baraban {hours} soat {minutes} daqiqadan keyin aylanadi!\n🎡 Har 24 soatda 1 marta!", reply_markup=get_main_menu())
+            await message.answer(f"⏰ <b>Baraban hali tayyor emas!</b>\n\nKeyingi aylantirish: <b>{hours} soat {minutes} daqiqa</b> qoldi\n\n🎡 Har 24 soatda 1 marta aylantira olasiz!", parse_mode="HTML", reply_markup=get_main_menu())
         return
     
+    # Baraban aylantirish
     reward = get_spin_reward()
     update_balance(user_id, reward)
     update_total_earned(user_id, reward)
     update_last_spin(user_id)
     
-    await message.answer(f"🎉 <b>BARABAN NATIJASI!</b> 🎉\n\n💰 Siz <b>{reward} UC</b> yutdingiz!\n💎 Yangi balans: <b>{get_balance(user_id)} UC</b>\n🎡 Keyingi aylantirish 24 soatdan keyin!", parse_mode="HTML", reply_markup=get_main_menu())
+    # Animatsiya
+    msg = await message.answer("🎡 <b>Baraban aylanyapti...</b> 🎡\n\n⏳ Iltimos kuting...", parse_mode="HTML")
+    await asyncio.sleep(1.5)
+    
+    # Natija
+    await msg.edit_text(
+        f"🎉 <b>BARABAN NATIJASI!</b> 🎉\n\n"
+        f"💰 Siz <b>{reward} UC</b> yutdingiz!\n\n"
+        f"💎 Yangi balans: <b>{get_balance(user_id)} UC</b>\n"
+        f"📈 Jami ishlagan: <b>{get_total_earned(user_id)} UC</b>\n\n"
+        f"🎡 Keyingi aylantirish <b>24 soatdan keyin</b> mumkin!",
+        parse_mode="HTML",
+        reply_markup=get_main_menu()
+    )
 
+# ===================== TOP REYTING =====================
 @dp.message(F.text == "🏆 Top Reyting")
 async def show_top_rating(message: types.Message):
     user_id = message.from_user.id
@@ -346,39 +367,64 @@ async def show_top_rating(message: types.Message):
     top_ref = get_top_referrers(10)
     top_earn = get_top_earners(10)
     
+    # Top taklif qilganlar
     ref_text = "<b>👥 ENG KO'P TAKLIF QILGANLAR</b>\n\n"
     if top_ref:
         for i, (uid, username, full_name, count) in enumerate(top_ref, 1):
-            name = (full_name or username or f"User {uid}")[:20]
+            name = full_name if full_name else username or f"User {uid}"
+            if len(name) > 20:
+                name = name[:18] + "..."
             ref_text += f"{i}. {name} – <b>{count}</b> ta\n"
     else:
         ref_text += "Hali hech kim taklif qilmagan\n"
     
+    # Top UC ishlaganlar
     earn_text = "\n\n<b>💰 ENG KO'P UC ISHLAGANLAR</b>\n\n"
     if top_earn:
         for i, (uid, username, full_name, earned) in enumerate(top_earn, 1):
-            name = (full_name or username or f"User {uid}")[:20]
+            name = full_name if full_name else username or f"User {uid}"
+            if len(name) > 20:
+                name = name[:18] + "..."
             earn_text += f"{i}. {name} – <b>{earned}</b> UC\n"
     else:
         earn_text += "Hali hech kim UC ishlamagan\n"
     
-    await message.answer(f"🏆 <b>TOP REYTING</b>\n\n{ref_text}{earn_text}", parse_mode="HTML", reply_markup=get_main_menu())
+    await message.answer(
+        f"🏆 <b>TOP REYTING</b>\n\n{ref_text}{earn_text}\n\n"
+        f"🎡 Baraban aylantirib va do'stlaringizni taklif qilib reytingga kiring!",
+        parse_mode="HTML",
+        reply_markup=get_main_menu()
+    )
 
 @dp.message(F.text == "📋 Qoidalar")
 async def show_rules(message: types.Message):
     await message.answer(
         f"📋 <b>Bot Qoidalari</b>\n\n"
-        f"1️⃣ Referal: +{REFERRAL_BONUS} UC\n"
-        f"2️⃣ Yechish: minimal {MIN_WITHDRAW} UC\n"
-        f"3️⃣ Baraban: 24 soatda 1 marta\n"
-        f"4️⃣ 2 ta kanalga obuna majburiy\n"
-        f"5️⃣ Aldash taqiqlanadi!",
+        f"1️⃣ <b>Referal UC:</b> Har bir taklif uchun +{REFERRAL_BONUS} UC\n"
+        f"2️⃣ <b>Yechish:</b> Minimal {MIN_WITHDRAW} UC\n"
+        f"3️⃣ <b>Baraban:</b> 24 soatda 1 marta aylantirish mumkin\n"
+        f"4️⃣ <b>Majburiy obuna:</b> 2 ta kanalga obuna bo'lish shart\n"
+        f"5️⃣ <b>Aldash:</b> Soxta akkauntlar va aldash taqiqlanadi!\n\n"
+        f"⚠️ Qoidalarni buzganlar bloklanadi!",
         parse_mode="HTML", reply_markup=get_main_menu()
     )
 
 @dp.message(F.text == "📞 Murojat")
 async def show_contact(message: types.Message):
-    await message.answer("📞 <b>Murojat</b>\n\n👨‍💼 Admin: @vrxszd\n\n❓ Savol va muammolar uchun yozing!", parse_mode="HTML", reply_markup=get_main_menu())
+    await message.answer(
+        "📞 <b>Murojat va Yordam</b>\n\n"
+        "👨‍💼 <b>Admin:</b> @vrxszd\n\n"
+        "❓ <b>Savollar bo'yicha:</b>\n"
+        "• Yechim muammolari\n"
+        "• Referal bo'yicha\n"
+        "• Baraban va reyting\n"
+        "• Umumiy savollar\n\n"
+        "📢 <b>Reklama va hamkorlik:</b>\n"
+        "👨‍💼 @vrxszd\n\n"
+        "⏰ <b>Ish vaqti:</b> 09:00 - 23:00\n"
+        "📅 Dushanba - Yakshanba",
+        parse_mode="HTML", reply_markup=get_main_menu()
+    )
 
 # ===================== ADMIN PROMO =====================
 @dp.message(Command("promo"))
@@ -419,8 +465,11 @@ async def main():
     
     me = await bot.get_me()
     print(f"✅ Bot: @{me.username}")
-    print(f"\n📢 Majburiy kanallar ({len(CHANNELS)} ta)")
-    print(f"💰 Minimal yechish: {MIN_WITHDRAW} UC")
+    print(f"\n📢 Majburiy kanallar ({len(CHANNELS)} ta):")
+    for ch in CHANNELS:
+        print(f"   - {ch['name']}: {ch['link']}")
+    print(f"\n💰 Minimal yechish: {MIN_WITHDRAW} UC")
+    print(f"🎁 Referal bonus: {REFERRAL_BONUS} UC")
     print(f"🎡 Baraban yutuqlari: {list(SPIN_REWARDS.keys())}")
     print("="*50)
     print("🎉 BOT ISHLADI!")
